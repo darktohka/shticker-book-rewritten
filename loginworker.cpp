@@ -26,6 +26,53 @@
 #include <QProcessEnvironment>
 #include <QDir>
 #include <QSettings>
+#include <QFile>
+#include <QStandardPaths>
+
+namespace {
+bool isNixOS()
+{
+#ifdef Q_OS_LINUX
+    QFile osRelease("/etc/os-release");
+    if(!osRelease.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        return false;
+    }
+
+    while(!osRelease.atEnd())
+    {
+        QString line = QString::fromUtf8(osRelease.readLine()).trimmed();
+
+        if(!line.startsWith("ID="))
+        {
+            continue;
+        }
+
+        QString distroId = line.mid(3).trimmed();
+        if(distroId.startsWith('"') && distroId.endsWith('"') && distroId.length() >= 2)
+        {
+            distroId = distroId.mid(1, distroId.length() - 2);
+        }
+
+        return distroId.compare("nixos", Qt::CaseInsensitive) == 0;
+    }
+#endif
+
+    return false;
+}
+
+bool startGameProcess(QProcess *gameProcess, const QString &program, const QStringList &arguments)
+{
+    gameProcess->start(program, arguments);
+    if(!gameProcess->waitForStarted(30000))
+    {
+        qDebug() << "Failed to start game process:" << program << arguments << gameProcess->errorString();
+        return false;
+    }
+
+    return true;
+}
+}
 
 
 LoginWorker::LoginWorker(QObject *parent) : QObject(parent)
@@ -253,9 +300,37 @@ void LoginWorker::startGame(QString cookie, QString gameServer)
     connect(gameProcess, SIGNAL(started()), this, SLOT(gameHasStarted()));
     connect(gameProcess, SIGNAL(finished(int)), this, SLOT(gameHasFinished(int)));
 
-    //start the game
-    gameProcess->start(ENGINE_FILENAME);
-    gameProcess->waitForStarted(30000);
+    bool gameStarted = false;
+
+    if(isNixOS())
+    {
+        QString steamRunPath = QStandardPaths::findExecutable("steam-run");
+        if(!steamRunPath.isEmpty())
+        {
+            qDebug() << "NixOS detected, launching game through steam-run";
+            gameStarted = startGameProcess(gameProcess, steamRunPath, QStringList() << ENGINE_FILENAME);
+        }
+        else
+        {
+            qDebug() << "NixOS detected but steam-run was not found in PATH";
+        }
+
+        if(!gameStarted)
+        {
+            qDebug() << "steam-run launch failed, retrying native launch";
+        }
+    }
+
+    if(!gameStarted)
+    {
+        gameStarted = startGameProcess(gameProcess, ENGINE_FILENAME, QStringList());
+    }
+
+    if(!gameStarted)
+    {
+        emit sendMessage("Unable to start Toontown Rewritten.");
+        emit authenticationFailed();
+    }
 }
 
 void LoginWorker::gameHasStarted()
