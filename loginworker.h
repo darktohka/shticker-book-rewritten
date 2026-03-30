@@ -45,7 +45,7 @@ signals:
     void authenticationFailed();
 
 public slots:
-    void initiateLogin(QString, QString);
+    void initiateLogin(QString, QString, QString);
     void receiveToken(QString);
     void timerFinished();
     void gameHasStarted();
@@ -64,6 +64,7 @@ private:
     QString lineToken;
     QProcess *gameProcess;
     QString filePath;
+    QString twoFactorSecret;
 
     QByteArray loginApiWorker(QByteArray);
     void startTwoFactorAuthentication();

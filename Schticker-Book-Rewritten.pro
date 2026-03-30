@@ -30,7 +30,9 @@ TEMPLATE = app
 
 
 SOURCES += main.cpp\
+    launcheruser.cpp \
     launcherwindow.cpp \
+    totpgenerator.cpp \
     updateworker.cpp \
     jsonworker.cpp \
     extractionworker.cpp \
@@ -44,6 +46,8 @@ SOURCES += main.cpp\
 
 HEADERS  += launcherwindow.h \
     globaldefines.h \
+    launcheruser.h \
+    totpgenerator.h \
     updateworker.h \
     jsonworker.h \
     extractionworker.h \

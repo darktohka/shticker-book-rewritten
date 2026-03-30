@@ -20,6 +20,7 @@
 
 #include "loginworker.h"
 #include "twofactorwindow.h"
+#include "totpgenerator.h"
 #include "globaldefines.h"
 
 #include <QUrlQuery>
@@ -110,8 +111,10 @@ QByteArray LoginWorker::loginApiWorker(QByteArray postData)
     return apiReply;
 }
 
-void LoginWorker::initiateLogin(QString username, QString password)
+void LoginWorker::initiateLogin(QString username, QString password, QString secret)
 {
+    this->twoFactorSecret = secret;
+
     //let the user know we are starting the login
     emit sendMessage("Sending credentials to the TTR Servers");
 
@@ -212,21 +215,29 @@ void LoginWorker::startTwoFactorAuthentication()
 
         qDebug() << "Partial authentication: starting 2 factor authentication.";
 
-
-        TwoFactorWindow *twoFactorWindow = new TwoFactorWindow(jsonObject["banner"].toString());
-        twoFactorWindow->show();
-
-        connect(twoFactorWindow, SIGNAL(sendToken(QString)), this, SLOT(receiveToken(QString)));
-
-        waitForFinished.exec(); //wait for the user to provide a token
-
-        //if the user decides to cancel the login
-        if(receivedToken == "cancel")
+        if(twoFactorSecret.isEmpty())
         {
-            emit sendMessage("Cancelling login.");
-            emit authenticationFailed();
-            qDebug() << "Cancelling two factor authentication\n";
-            return;
+            TwoFactorWindow *twoFactorWindow = new TwoFactorWindow(jsonObject["banner"].toString());
+            twoFactorWindow->show();
+
+            connect(twoFactorWindow, SIGNAL(sendToken(QString)), this, SLOT(receiveToken(QString)));
+
+            waitForFinished.exec(); //wait for the user to provide a token
+
+            //if the user decides to cancel the login
+            if(receivedToken == "cancel")
+            {
+                emit sendMessage("Cancelling login.");
+                emit authenticationFailed();
+                qDebug() << "Cancelling two factor authentication\n";
+                return;
+            }
+        }
+        else
+        {
+            //generate two factor code automatically
+            receivedToken = TOTPGenerator(twoFactorSecret).generateCode();
+            twoFactorSecret.clear();
         }
 
         //send a new API request with the provided token

@@ -52,9 +52,13 @@ LauncherWindow::LauncherWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui
 
     //setup saved toons
     ui->savedToonsBox->addItem("Saved logins");
-    ui->savedToonsBox->addItems(savedUsers);
 
-    connect(ui->savedToonsBox, SIGNAL(currentTextChanged(QString)), this, SLOT(fillCredentials(QString)));
+    for(const LauncherUser &user : savedUsers)
+    {
+        ui->savedToonsBox->addItem(user.getUsername());
+    }
+
+    connect(ui->savedToonsBox, SIGNAL(currentIndexChanged(int)), this, SLOT(fillCredentials(int)));
 
     //setup the webviews
     ui->newsWebview->setUrl(QUrl("https://www.toontownrewritten.com/news/launcher"));
@@ -141,7 +145,7 @@ void LauncherWindow::initiateLogin()
         connect(loginWorker, SIGNAL(authenticationFailed()), this, SLOT(authenticationFailed()));
 
         //start login and then the game
-        loginWorker->initiateLogin(ui->usernameBox->text(), ui->passwordBox->text());
+        loginWorker->initiateLogin(ui->usernameBox->text(), ui->passwordBox->text(), ui->twofactorBox->text());
     }
     else
     {
@@ -157,21 +161,28 @@ void LauncherWindow::gameHasStarted()
     //check whether to save the credentials or not
     if(ui->saveCredentialsBox->isChecked())
     {
-        //check to see if it already exists
-        if(savedUsers.contains(ui->usernameBox->text()))
-        {
-            int i;
-            i = savedUsers.indexOf(ui->usernameBox->text());
+        QString username = ui->usernameBox->text();
+        bool edited = false;
 
-            //replace the password for this username
-            savedPasses.replace(i, ui->passwordBox->text());
+        // check to see if we can edit an existing user
+        for(LauncherUser &user : savedUsers)
+        {
+            if(user.getUsername() != username)
+            {
+                continue;
+            }
+
+            user.setPassword(ui->passwordBox->text());
+            user.setSecret(ui->twofactorBox->text().trimmed());
+            edited = true;
+            break;
         }
-        else
-        {
-            savedUsers.append(ui->usernameBox->text());
-            savedPasses.append(ui->passwordBox->text());
 
-            ui->savedToonsBox->addItem(ui->usernameBox->text());
+        // if not, add this user as a new one
+        if(!edited)
+        {
+            savedUsers.append(LauncherUser(username, ui->passwordBox->text(), ui->twofactorBox->text().trimmed()));
+            ui->savedToonsBox->addItem(username);
         }
 
         //uncheck the box now
@@ -286,8 +297,19 @@ void LauncherWindow::writeSettings()
     settings.endGroup();
 
     settings.beginGroup("Logins");
-    settings.setValue("username", savedUsers);
-    settings.setValue("pass", savedPasses);
+
+    for(const LauncherUser &user : savedUsers)
+    {
+        settings.beginGroup(user.getUsername());
+        settings.setValue("password", user.getPassword());
+        settings.setValue("secret", user.getSecret());
+        settings.endGroup();
+    }
+
+    //remove legacy users
+    settings.remove("username");
+    settings.remove("pass");
+
     settings.endGroup();
 }
 
@@ -301,9 +323,26 @@ void LauncherWindow::readSettings()
     autoUpdate = settings.value("update", true).toBool();
     settings.endGroup();
 
+    savedUsers.clear();
     settings.beginGroup("Logins");
-    savedUsers = settings.value("username").toStringList();
-    savedPasses = settings.value("pass").toStringList();
+
+    //load all users from settings
+    for(const QString &username : settings.childGroups())
+    {
+        settings.beginGroup(username);
+        savedUsers.append(LauncherUser(username, settings.value("password").toString(), settings.value("secret").toString()));
+        settings.endGroup();
+    }
+
+    //load legacy users from settings
+    QStringList legacyUsernames = settings.value("username").toStringList();
+    QStringList legacyPasses = settings.value("pass").toStringList();
+
+    for(int i = 0; i < legacyUsernames.length() && i < legacyPasses.length(); ++i)
+    {
+        savedUsers.append(LauncherUser(legacyUsernames[i], legacyPasses[i], ""));
+    }
+
     settings.endGroup();
 
     if(autoUpdate)
@@ -326,19 +365,19 @@ void LauncherWindow::readSettingsPath()
     cachePath = filePath + QString(".cache/");
 }
 
-void LauncherWindow::fillCredentials(QString username)
-{
-    int i = savedUsers.indexOf(username);
-
-    if(i == -1)
+void LauncherWindow::fillCredentials(int index) {
+    if(index == 0)
     {
         ui->usernameBox->clear();
         ui->passwordBox->clear();
+        ui->twofactorBox->clear();
         return;
     }
 
-    ui->usernameBox->setText(username);
-    ui->passwordBox->setText(savedPasses.at(i));
+    LauncherUser user = savedUsers.at(index - 1);
+    ui->usernameBox->setText(user.getUsername());
+    ui->passwordBox->setText(user.getPassword());
+    ui->twofactorBox->setText(user.getSecret());
 }
 
 void LauncherWindow::updateFiles()

@@ -22,10 +22,11 @@
 #define LAUNCHERWINDOW_H
 
 #include "loginworker.h"
+#include "launcheruser.h"
 
 #include <QObject>
 #include <QMainWindow>
-#include <QStringList>
+#include <QList>
 
 namespace Ui {
 class LauncherWindow;
@@ -50,7 +51,7 @@ private slots:
     void gameHasFinished(int, QByteArray);
     void authenticationFailed();
     void newsViewLoaded();
-    void fillCredentials(QString);
+    void fillCredentials(int);
     void changeFilePath();
     void updateFiles();
     void updatesReady();
@@ -70,8 +71,7 @@ private:
     LoginWorker *loginWorker;
     int gameInstances;
     QThread *updateThread;
-    QStringList savedUsers;
-    QStringList savedPasses;
+    QList<LauncherUser> savedUsers;
     QString filePath;
     QString cachePath;
     bool autoUpdate;
